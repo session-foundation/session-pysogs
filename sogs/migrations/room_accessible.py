@@ -1,5 +1,6 @@
 import logging
 from .exc import DatabaseUpgradeRequired
+from sqlalchemy import text
 
 
 def migrate(conn, *, check_only):
@@ -14,15 +15,15 @@ def migrate(conn, *, check_only):
     if check_only:
         raise DatabaseUpgradeRequired("Add accessible room permission columns")
 
-    conn.execute("ALTER TABLE rooms ADD COLUMN accessible BOOLEAN NOT NULL DEFAULT TRUE")
-    conn.execute("ALTER TABLE user_permission_overrides ADD COLUMN accessible BOOLEAN")
+    conn.execute(text("ALTER TABLE rooms ADD COLUMN accessible BOOLEAN NOT NULL DEFAULT TRUE"))
+    conn.execute(text("ALTER TABLE user_permission_overrides ADD COLUMN accessible BOOLEAN"))
 
     # Gets recreated in the user_permissions migration:
-    conn.execute("DROP VIEW IF EXISTS user_permissions")
+    conn.execute(text("DROP VIEW IF EXISTS user_permissions"))
 
     if db.engine.name == "sqlite":
-        conn.execute("DROP TRIGGER IF EXISTS user_perms_empty_cleanup")
-        conn.execute(
+        conn.execute(text("DROP TRIGGER IF EXISTS user_perms_empty_cleanup"))
+        conn.execute(text(
             """
 CREATE TRIGGER user_perms_empty_cleanup AFTER UPDATE ON user_permission_overrides
 FOR EACH ROW WHEN NOT (NEW.banned OR NEW.moderator OR NEW.admin)
@@ -31,10 +32,10 @@ BEGIN
     DELETE from user_permission_overrides WHERE room = NEW.room AND user = NEW.user;
 END
 """
-        )
+        ))
 
     else:
-        conn.execute(
+        conn.execute(text(
             """
 DROP TRIGGER IF EXISTS user_perms_empty_cleanup ON user_permission_overrides;
 
@@ -43,6 +44,6 @@ FOR EACH ROW WHEN (NOT (NEW.banned OR NEW.moderator OR NEW.admin)
     AND COALESCE(NEW.accessible, NEW.read, NEW.write, NEW.upload) IS NULL)
 EXECUTE PROCEDURE trigger_user_perms_empty_cleanup();
 """
-        )
+        ))
 
     return True

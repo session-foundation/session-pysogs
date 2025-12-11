@@ -92,28 +92,28 @@ class Message:
 
     @property
     def id(self):
-        return self._row["id"]
+        return self._row.id
 
     @property
     def posted_at(self):
-        return self._row["posted_at"]
+        return self._row.posted_at
 
     @property
     def expires_at(self):
-        return self._row["expiry"]
+        return self._row.expiry
 
     @property
     def data(self):
-        return self._row['body']
+        return self._row.body
 
     @property
     def sender(self):
         if not hasattr(self, "_sender"):
-            self._sender = User(id=self._row['sender'], autovivify=False)
+            self._sender = User(id=self._row.sender, autovivify=False)
         return self._sender
 
     @property
     def recipient(self):
         if not hasattr(self, "_recip"):
-            self._recip = User(id=self._row['recipient'], autovivify=False)
+            self._recip = User(id=self._row.recipient, autovivify=False)
         return self._recip

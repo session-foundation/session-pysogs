@@ -1,5 +1,6 @@
 import logging
 from .exc import DatabaseUpgradeRequired
+from sqlalchemy import text
 
 
 def migrate(conn, *, check_only):
@@ -32,12 +33,12 @@ def migrate(conn, *, check_only):
     if check_only:
         raise DatabaseUpgradeRequired("message views need to be recreated")
 
-    conn.execute("DROP VIEW IF EXISTS message_metadata")
-    conn.execute("DROP VIEW IF EXISTS message_details")
+    conn.execute(text("DROP VIEW IF EXISTS message_metadata"))
+    conn.execute(text("DROP VIEW IF EXISTS message_details"))
 
     if db.engine.name == "sqlite":
-        conn.execute("DROP TRIGGER IF EXISTS message_details_deleter")
-        conn.execute(
+        conn.execute(text("DROP TRIGGER IF EXISTS message_details_deleter"))
+        conn.execute(text(
             """
 CREATE VIEW message_details AS
 SELECT messages.*, uposter.session_id, uwhisper.session_id AS whisper_to
@@ -45,8 +46,8 @@ SELECT messages.*, uposter.session_id, uwhisper.session_id AS whisper_to
         JOIN users uposter ON messages."user" = uposter.id
         LEFT JOIN users uwhisper ON messages.whisper = uwhisper.id
 """
-        )
-        conn.execute(
+        ))
+        conn.execute(text(
             """
 CREATE TRIGGER message_details_deleter INSTEAD OF DELETE ON message_details
 FOR EACH ROW WHEN OLD.data IS NOT NULL
@@ -57,8 +58,8 @@ BEGIN
         SELECT id FROM reactions WHERE message = OLD.id);
 END
 """
-        )
-        conn.execute(
+        ))
+        conn.execute(text(
             """
 CREATE VIEW message_metadata AS
 SELECT id, room, "user", session_id, posted, edited, seqno, seqno_data, seqno_reactions, seqno_creation,
@@ -66,10 +67,10 @@ SELECT id, room, "user", session_id, posted, edited, seqno, seqno_data, seqno_re
         length(data) AS data_unpadded, data_size, length(signature) as signature_length
     FROM message_details
 """  # noqa: E501
-        )
+        ))
 
     else:  # postgresql
-        conn.execute(
+        conn.execute(text(
             """
 -- Effectively the same as `messages` except that it also includes the `session_id` from the users
 -- table of the user who posted it, and the session id of the whisper recipient (as `whisper_to`) if
@@ -105,6 +106,6 @@ SELECT id, room, "user", session_id, posted, edited, seqno, seqno_data, seqno_re
         length(data) AS data_unpadded, data_size, length(signature) as signature_length
     FROM message_details;
 """  # noqa: E501
-        )
+        ))
 
     return True

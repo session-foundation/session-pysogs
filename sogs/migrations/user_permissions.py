@@ -1,5 +1,6 @@
 import logging
 from .exc import DatabaseUpgradeRequired
+from sqlalchemy import text
 
 
 def migrate(conn, *, check_only):
@@ -17,7 +18,7 @@ def migrate(conn, *, check_only):
     if check_only:
         raise DatabaseUpgradeRequired("Recreate user_permissions view")
 
-    conn.execute(
+    conn.execute(text(
         """
 CREATE VIEW user_permissions AS
 SELECT
@@ -46,6 +47,6 @@ FROM
     users CROSS JOIN rooms LEFT OUTER JOIN user_permission_overrides ON
         (users.id = user_permission_overrides."user" AND rooms.id = user_permission_overrides.room)
 """  # noqa E501
-    )
+    ))
 
     return True

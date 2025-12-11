@@ -113,10 +113,10 @@ class User:
             raise NoSuchUser(session_id if session_id is not None else id)
 
         self.id, self.session_id, self.created, self.last_active = (
-            row[c] for c in ('id', 'session_id', 'created', 'last_active')
+            row.id, row.session_id, row.created, row.last_active
         )
         self.banned, self.global_moderator, self.global_admin, self.visible_mod = (
-            bool(row[c]) for c in ('banned', 'moderator', 'admin', 'visible_mod')
+            bool(v) for v in (row.banned, row.moderator, row.admin, row.visible_mod)
         )
 
     def _import_blinded(self, session_id):
@@ -152,28 +152,28 @@ class User:
                 "users",
                 "id",
                 sid=session_id,
-                cr=to_import["created"],
-                la=to_import["last_active"],
-                ban=to_import["banned"],
-                mod=to_import["moderator"],
-                admin=to_import["admin"],
-                vis=to_import["visible_mod"],
+                cr=to_import.created,
+                la=to_import.last_active,
+                ban=to_import.banned,
+                mod=to_import.moderator,
+                admin=to_import.admin,
+                vis=to_import.visible_mod,
             )
             # If we have any global ban/admin/mod then clear them (because we've just set up the
             # global ban/mod/admin permissions for the blinded id in the query above).
             query(
                 "UPDATE users SET banned = FALSE, admin = FALSE, moderator = FALSE WHERE id = :u",
-                u=to_import["id"],
+                u=to_import.id,
             )
 
             for t in ("user_permission_overrides", "user_permission_futures", "user_ban_futures"):
                 query(
                     f'UPDATE {t} SET "user" = :new WHERE "user" = :old',
-                    new=row["id"],
-                    old=to_import["id"],
+                    new=row.id,
+                    old=to_import.id,
                 )
 
-            query('DELETE FROM needs_blinding WHERE "user" = :u', u=to_import["id"])
+            query('DELETE FROM needs_blinding WHERE "user" = :u', u=to_import.id)
 
             return row
 
