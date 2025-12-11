@@ -338,7 +338,7 @@ def handle_http_auth():
     to_verify = (
         crypto.server_pubkey_bytes
         + nonce
-        + ts_str.encode()
+        + str(ts_str).encode()
         + request.method.encode()
         + request.path.encode()
     )
