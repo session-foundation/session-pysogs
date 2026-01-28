@@ -4,7 +4,7 @@ from nacl.utils import random
 import nacl.hash
 from hashlib import blake2b
 
-from pyonionreq import xed25519
+from session_util import xed25519
 
 worked, trials = 0, 10000
 
