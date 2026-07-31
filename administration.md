@@ -56,6 +56,12 @@ Active users: 0 (7d), 0 (14d) 0 (30d)
 Moderators: 0 admins (0 hidden), 0 moderators (0 hidden)
 ```
 
+Rooms can also be created and deleted over the API rather than on the server, using `POST /rooms`
+and `DELETE /room/TOKEN`; both require the request to be signed by a global admin (see "Add an
+administrator or moderator", below, for how to appoint one).  This is intended for tools that manage
+rooms remotely — for example a test suite that gives each run a room of its own — and is documented
+along with the rest of the API.
+
 ## Add an administrator or moderator to a room
 
 To add an administrator or moderator of a room you use one of the following commands:

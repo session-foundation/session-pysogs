@@ -16,6 +16,103 @@ externalDocs:
   description: Find out more about the Oxen project
   url: http://oxen.io
 paths:
+  /rooms:
+    post:
+      tags: [Rooms]
+      summary: Creates a new room.
+      description: >
+        Creates a room with the given token, name, and (optional) description.  The invoking user
+        must be a global admin.
+
+
+        The new room takes the server's default permissions (readable, accessible, writable and
+        uploadable by ordinary users); use `PUT /room/{roomToken}` to change them.
+
+
+        Note that the new room contains no messages at all.  Some clients wait for a message to
+        arrive before they consider a community usable, and so appear to hang rather than fail on a
+        room nobody has posted in; a caller that cares about this should post a message of its own
+        after creating the room.
+      requestBody:
+        description: "Details of the room to create."
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, name]
+              properties:
+                token:
+                  $ref: "#/components/schemas/RoomToken"
+                name:
+                  type: string
+                  example: "Sudoku Solvers"
+                  description: >
+                    The room name typically shown to users.  Control characters (i.e. codepoints
+                    below 0x20) are stripped out, and what remains may not be empty.
+                description:
+                  type: string
+                  nullable: true
+                  example: "All the best sodoku discussion!"
+                  description: >
+                    Longer description of the room, typically shown in smaller text below the room
+                    name.  Newlines and tabs are permitted; other control characters are stripped
+                    out.  May be omitted, null, or empty for a room with no description.
+            examples:
+              sudoku:
+                summary: "A room with a description"
+                value:
+                  token: "sudoku"
+                  name: "Sudoku Solvers"
+                  description: "All the best sodoku discussion!"
+      responses:
+        201:
+          description: >
+            Room created.  The body is the new room's details, exactly as `GET /room/{roomToken}`
+            would return them to the same user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Room"
+        400:
+          description: "The given token or name is missing or unacceptable."
+          content: {}
+        403:
+          description: "Permission denied.  The invoking user is not a global admin."
+          content: {}
+        409:
+          description: >
+            A room with the given token already exists.  Room tokens are case-insensitive, so this
+            includes a token differing from an existing one only in case.
+          content: {}
+  /room/{roomToken}:
+    delete:
+      tags: [Rooms]
+      summary: Deletes a room.
+      description: >
+        Deletes the room along with all of the posts, files, permissions and bans within it.  This
+        is permanent and cannot be undone.
+
+
+        The invoking user must be a global admin: a room admin administers a room, but removing one
+        from the server entirely is a server-level operation.
+      parameters:
+      - $ref: "#/components/parameters/pathRoomToken"
+      responses:
+        200:
+          description: "Room deleted.  The body is an empty json object."
+          content:
+            application/json:
+              schema:
+                type: object
+        403:
+          description: "Permission denied.  The invoking user is not a global admin."
+          content: {}
+        404:
+          description: >
+            No room with the given token exists.  A caller removing a room it no longer wants can
+            treat this the same as success: either way the room is gone.
+          content: {}
   /user/{sessionId}/permission:
     post:
       tags: [Users]

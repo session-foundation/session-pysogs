@@ -1696,3 +1696,138 @@ def test_set_room_perms_blinding(client, db, room, user, user2, mod):
         )
         assert r2.status_code == 200
         assert r2.json == r.json
+
+
+def test_create_room(client, room, user, mod, admin, global_mod, global_admin):
+    url = '/rooms'
+    body = {"token": "sudoku", "name": "Sudoku Solvers"}
+
+    # Creating a room is a global admin operation:
+    r = client.post(url, json=body)
+    assert r.status_code == 401
+
+    for u in (user, mod, admin, global_mod):
+        r = sogs_post(client, url, body, u)
+        assert r.status_code == 403
+
+    assert sogs_get(client, '/room/sudoku', user).status_code == 404
+
+    r = sogs_post(client, url, body, global_admin)
+    assert r.status_code == 201
+
+    new_room = Room(token='sudoku')
+    assert r.json == {
+        "token": "sudoku",
+        "name": "Sudoku Solvers",
+        "info_updates": 0,
+        "message_sequence": 0,
+        "created": new_room.created,
+        "active_users": 0,
+        "active_users_cutoff": int(sogs.config.ROOM_DEFAULT_ACTIVE_THRESHOLD),
+        "moderators": [],
+        "admins": [],
+        "hidden_moderators": [global_mod.session_id],
+        "hidden_admins": [global_admin.session_id],
+        "read": True,
+        "write": True,
+        "upload": True,
+        "moderator": True,
+        "admin": True,
+        "global_moderator": True,
+        "global_admin": True,
+        "default_read": True,
+        "default_accessible": True,
+        "default_write": True,
+        "default_upload": True,
+    }
+
+    # The creation response is exactly what the room endpoint returns for the same user:
+    assert sogs_get(client, '/room/sudoku', global_admin).json == r.json
+
+    # The room is a normal, readable, writable room for everyone else:
+    assert sogs_get(client, '/room/sudoku', user).status_code == 200
+
+    # Room tokens are case-insensitive, so neither of these is available anymore:
+    for token in ('sudoku', 'SudoKu'):
+        r = sogs_post(client, url, {"token": token, "name": "Sudoku Solvers II"}, global_admin)
+        assert r.status_code == 409
+
+    for bad in (
+        {"name": "No token"},
+        {"token": None, "name": "Null token"},
+        {"token": "", "name": "Empty token"},
+        {"token": "bad token", "name": "Space in token"},
+        {"token": "bad/token", "name": "Slash in token"},
+        {"token": "x" * 65, "name": "Token too long"},
+        {"token": 42, "name": "Numeric token"},
+        {"token": "no-name"},
+        {"token": "null-name", "name": None},
+        {"token": "empty-name", "name": ""},
+        {"token": "control-name", "name": "\x01\x02"},
+        {"token": "bad-desc", "name": "Bad description", "description": 42},
+    ):
+        r = sogs_post(client, url, bad, global_admin)
+        assert r.status_code == 400
+
+    r = sogs_post(client, url, ["not", "an", "object"], global_admin)
+    assert r.status_code == 400
+
+    assert sogs_get(client, '/room/no-name', global_admin).status_code == 404
+    assert sogs_get(client, '/room/bad-desc', global_admin).status_code == 404
+
+    # Control characters are stripped from the name; the description keeps newlines and tabs:
+    r = sogs_post(
+        client,
+        url,
+        {"token": "chess", "name": "Chess\x01 Club", "description": "Rooks\nand\x01 bishops"},
+        global_admin,
+    )
+    assert r.status_code == 201
+    assert r.json['name'] == "Chess Club"
+    assert r.json['description'] == "Rooks\nand bishops"
+
+    # An empty description is the same as having none at all:
+    r = sogs_post(client, url, {"token": "go", "name": "Go", "description": ""}, global_admin)
+    assert r.status_code == 201
+    assert 'description' not in r.json
+
+
+def test_delete_room(client, room, room2, user, mod, admin, global_mod, global_admin):
+    url = '/room/test-room'
+
+    # Removing a room entirely is a global admin operation: a room admin administers the room, but
+    # does not get to destroy it.
+    r = client.delete(url)
+    assert r.status_code == 401
+
+    for u in (user, mod, admin, global_mod):
+        r = sogs_delete(client, url, u)
+        assert r.status_code == 403
+
+    assert sogs_get(client, url, user).status_code == 200
+
+    r = sogs_delete(client, url, global_admin)
+    assert r.status_code == 200
+    assert r.json == {}
+
+    assert sogs_get(client, url, user).status_code == 404
+
+    # Deleting it again is a Not Found, which a caller cleaning up after itself can treat the same
+    # as success: either way the room is gone.
+    r = sogs_delete(client, url, global_admin)
+    assert r.status_code == 404
+
+    # A room that never existed is the same:
+    assert sogs_delete(client, '/room/never-existed', global_admin).status_code == 404
+
+    # Other rooms are unaffected:
+    assert sogs_get(client, '/room/room2', user).status_code == 200
+    assert [r['token'] for r in sogs_get(client, '/rooms', user).json] == ['room2']
+
+    # A room the caller creates can be removed again, which is the whole point of having both
+    # endpoints:
+    r = sogs_post(client, '/rooms', {"token": "sudoku", "name": "Sudoku Solvers"}, global_admin)
+    assert r.status_code == 201
+    r = sogs_delete(client, '/room/sudoku', global_admin)
+    assert r.status_code == 200
+    assert [r['token'] for r in sogs_get(client, '/rooms', user).json] == ['room2']
