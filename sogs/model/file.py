@@ -46,18 +46,15 @@ class File:
             self.filename,
             self.path,
         ) = (
-            row[c]
-            for c in (
-                'id',
-                'room',
-                'uploader',
-                'message',
-                'size',
-                'uploaded',
-                'expiry',
-                'filename',
-                'path',
-            )
+            row.id,
+            row.room,
+            row.uploader,
+            row.message,
+            row.size,
+            row.uploaded,
+            row.expiry,
+            row.filename,
+            row.path,
         )
         self._room = None
         self._uploader = None

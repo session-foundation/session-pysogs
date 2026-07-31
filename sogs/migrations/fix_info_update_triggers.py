@@ -1,5 +1,6 @@
 import logging
 from .exc import DatabaseUpgradeRequired
+from sqlalchemy import text
 
 
 def migrate(conn, *, check_only):
@@ -32,10 +33,10 @@ def migrate(conn, *, check_only):
         raise DatabaseUpgradeRequired("global hidden mod room triggers need to be recreated")
 
     if db.engine.name == "sqlite":
-        conn.execute("DROP TRIGGER IF EXISTS room_metadata_global_mods_insert")
-        conn.execute("DROP TRIGGER IF EXISTS room_metadata_global_mods_update")
-        conn.execute("DROP TRIGGER IF EXISTS room_metadata_global_mods_delete")
-        conn.execute(
+        conn.execute(text("DROP TRIGGER IF EXISTS room_metadata_global_mods_insert"))
+        conn.execute(text("DROP TRIGGER IF EXISTS room_metadata_global_mods_update"))
+        conn.execute(text("DROP TRIGGER IF EXISTS room_metadata_global_mods_delete"))
+        conn.execute(text(
             """
 CREATE TRIGGER room_metadata_global_mods_insert AFTER INSERT ON users
 FOR EACH ROW WHEN (NEW.admin OR NEW.moderator)
@@ -43,7 +44,7 @@ BEGIN
     UPDATE rooms SET info_updates = info_updates + 1; -- WHERE everything!
 END
 """
-        )
+        ))
         conn.execute(
             """
 CREATE TRIGGER room_metadata_global_mods_update AFTER UPDATE ON users
@@ -53,7 +54,7 @@ BEGIN
 END
 """  # noqa: E501
         )
-        conn.execute(
+        conn.execute(text(
             """
 CREATE TRIGGER room_metadata_global_mods_delete AFTER DELETE ON users
 FOR EACH ROW WHEN (OLD.moderator OR OLD.admin)
@@ -61,7 +62,7 @@ BEGIN
     UPDATE rooms SET info_updates = info_updates + 1; -- WHERE everything!
 END
 """
-        )
+        ))
 
     else:  # postgresql
         conn.execute(

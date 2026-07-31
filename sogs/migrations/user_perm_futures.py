@@ -1,5 +1,6 @@
 import logging
 from .exc import DatabaseUpgradeRequired
+from sqlalchemy import text
 
 
 def migrate(conn, *, check_only):
@@ -20,8 +21,8 @@ def migrate(conn, *, check_only):
     if db.engine.name == 'sqlite':
         # Under sqlite we have to drop and recreate the whole thing.  (Since we didn't have a
         # release out that was using futures yet, we don't bother trying to migrate data).
-        conn.execute("DROP TABLE user_permission_futures")
-        conn.execute(
+        conn.execute(text("DROP TABLE user_permission_futures"))
+        conn.execute(text(
             """
 CREATE TABLE user_permission_futures (
     room INTEGER NOT NULL REFERENCES rooms ON DELETE CASCADE,
@@ -32,15 +33,15 @@ CREATE TABLE user_permission_futures (
     upload BOOLEAN /* Set this value @ at, if non-null */
 )
 """
-        )
-        conn.execute("CREATE INDEX user_permission_futures_at ON user_permission_futures(at)")
-        conn.execute(
+        ))
+        conn.execute(text("CREATE INDEX user_permission_futures_at ON user_permission_futures(at)"))
+        conn.execute(text(
             """
 CREATE INDEX user_permission_futures_room_user ON user_permission_futures(room, user)
 """
-        )
+        ))
 
-        conn.execute(
+        conn.execute(text(
             """
 CREATE TABLE user_ban_futures (
     room INTEGER REFERENCES rooms ON DELETE CASCADE,
@@ -49,12 +50,12 @@ CREATE TABLE user_ban_futures (
     banned BOOLEAN NOT NULL /* if true then ban at `at`, if false then unban */
 );
 """
-        )
-        conn.execute("CREATE INDEX user_ban_futures_at ON user_ban_futures(at)")
-        conn.execute("CREATE INDEX user_ban_futures_room_user ON user_ban_futures(room, user)")
+        ))
+        conn.execute(text("CREATE INDEX user_ban_futures_at ON user_ban_futures(at)"))
+        conn.execute(text("CREATE INDEX user_ban_futures_room_user ON user_ban_futures(room, user)"))
 
     else:  # postgresql
-        conn.execute(
+        conn.execute(text(
             """
 CREATE TABLE user_ban_futures (
     room INTEGER REFERENCES rooms ON DELETE CASCADE,
@@ -73,6 +74,6 @@ DELETE FROM user_permission_futures WHERE read IS NULL AND write IS NULL AND upl
 ALTER TABLE user_permission_futures DROP CONSTRAINT IF EXISTS user_permission_futures_pkey;
 ALTER TABLE user_permission_futures DROP COLUMN banned;
 """
-        )
+        ))
 
     return True

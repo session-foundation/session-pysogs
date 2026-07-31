@@ -4,6 +4,7 @@ from .postfork import postfork
 import os
 import logging
 import importlib.resources
+from contextlib import nullcontext
 import sqlalchemy
 from sqlalchemy.sql.expression import bindparam
 
@@ -17,6 +18,34 @@ def get_conn():
     """Gets a connection from the database engine connection pool.  This is not intended to be used
     by flask endpoints: they should use web.appdb instead (which calls this upon first use)."""
     return engine.connect()
+
+
+# Begins a (potentially nested) transaction.  Takes an optional connection; if omitted uses
+# web.appdb.
+def transaction(dbconn=None):
+    if dbconn is None:
+        from . import web
+
+        dbconn = web.appdb
+    if dbconn.in_transaction():
+        return dbconn.begin_nested()
+    else:
+        return dbconn.begin()
+
+
+# Similar to transaction(), above, except that if we are already in a
+# transaction this does nothing (unless transaction(), which uses savepoints
+# effectively as sub-transactions).
+def maybe_tx(dbconn=None):
+    if dbconn is None:
+        from . import web
+
+        dbconn = web.appdb
+
+    if dbconn.in_transaction():
+        return nullcontext()
+    else:
+        return dbconn.begin()
 
 
 def query(query, *, dbconn=None, bind_expanding=None, **params):
@@ -51,17 +80,8 @@ def query(query, *, dbconn=None, bind_expanding=None, **params):
     if bind_expanding:
         q = q.bindparams(*(bindparam(c, expanding=True) for c in bind_expanding))
 
-    return dbconn.execute(q, **params)
-
-
-# Begins a (potentially nested) transaction.  Takes an optional connection; if omitted uses
-# web.appdb.
-def transaction(dbconn=None):
-    if dbconn is None:
-        from . import web
-
-        dbconn = web.appdb
-    return dbconn.begin_nested()
+    with maybe_tx(dbconn):
+        return dbconn.execute(q, params)
 
 
 have_returning = True

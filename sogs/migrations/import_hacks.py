@@ -1,5 +1,6 @@
 import logging
 from .exc import DatabaseUpgradeRequired
+from sqlalchemy import text
 
 
 def migrate(conn, *, check_only):
@@ -25,13 +26,13 @@ def migrate(conn, *, check_only):
         logging.warning("Dropping old_room_import_hacks temporary table")
         if check_only:
             raise DatabaseUpgradeRequired("old_room_import_hacks")
-        conn.execute('DROP TABLE old_room_import_hacks')
+        conn.execute(text('DROP TABLE old_room_import_hacks'))
         changed = True
 
     if 'file_id_hacks' in db.metadata.tables:
         # If the table exists but is empty (i.e. because all the attachments expired) then we should
         # drop it.
-        if not check_only and conn.execute("SELECT COUNT(*) FROM file_id_hacks").first()[0] == 0:
+        if not check_only and conn.execute(text("SELECT COUNT(*) FROM file_id_hacks")).first()[0] == 0:
             logging.warning("Dropping file_id_hacks old sogs import table (no longer required)")
             db.metadata.tables['file_id_hacks'].drop(db.engine)
             changed = True
@@ -41,7 +42,7 @@ def migrate(conn, *, check_only):
 
     if 'room_import_hacks' in db.metadata.tables:
         rows = conn.execute(
-            "SELECT room, old_message_id_max, message_id_offset FROM room_import_hacks"
+            text("SELECT room, old_message_id_max, message_id_offset FROM room_import_hacks")
         )
         for (room, id_max, offset) in rows:
             db.ROOM_IMPORT_HACKS[room] = (id_max, offset)
@@ -60,15 +61,15 @@ def migrate(conn, *, check_only):
             # Annoyingly, sqlalchemy doesn't pick up foreign key actions when reflecting
             # sqlite (probably because sqlite doesn't enforce foreign keys by default), so
             # we have to pragma query the info ourself:
-            for fk in conn.execute('PRAGMA foreign_key_list("file_id_hacks")'):
+            for fk in conn.execute(text('PRAGMA foreign_key_list("file_id_hacks")')):
                 if fk['from'] == 'room' and fk['on_delete'] != 'CASCADE':
                     need_fix = True
             if need_fix:
                 logging.warning("Replacing file_id_hacks to add cascading foreign key")
                 if check_only:
                     raise DatabaseUpgradeRequired("file_id_hacks")
-                conn.execute("ALTER TABLE file_id_hacks RENAME TO old_file_id_hacks")
-                conn.execute(
+                conn.execute(text("ALTER TABLE file_id_hacks RENAME TO old_file_id_hacks"))
+                conn.execute(text(
                     """
 CREATE TABLE file_id_hacks (
     room INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
@@ -77,13 +78,13 @@ CREATE TABLE file_id_hacks (
     PRIMARY KEY(room, old_file_id)
 )
                     """
-                )
-                conn.execute(
+                ))
+                conn.execute(text(
                     """
                     INSERT INTO file_id_hacks
                     SELECT room, old_file_id, file FROM old_file_id_hacks
                     """
-                )
+                ))
 
                 changed = True
 
@@ -92,15 +93,15 @@ CREATE TABLE file_id_hacks (
             # Annoyingly, sqlalchemy doesn't pick up foreign key actions when reflecting
             # sqlite (probably because sqlite doesn't enforce foreign keys by default), so
             # we have to pragma query the info ourself:
-            for fk in conn.execute('PRAGMA foreign_key_list("room_import_hacks")'):
+            for fk in conn.execute(text('PRAGMA foreign_key_list("room_import_hacks")')):
                 if fk['from'] == 'room' and fk['on_delete'] != 'CASCADE':
                     need_fix = True
             if need_fix:
                 logging.warning("Replacing room_import_hacks to add cascading foreign key")
                 if check_only:
                     raise DatabaseUpgradeRequired("room_import_hacks")
-                conn.execute("ALTER TABLE room_import_hacks RENAME TO old_room_import_hacks")
-                conn.execute(
+                conn.execute(text("ALTER TABLE room_import_hacks RENAME TO old_room_import_hacks"))
+                conn.execute(text(
                     """
 CREATE TABLE room_import_hacks (
     room INTEGER PRIMARY KEY NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
@@ -108,15 +109,15 @@ CREATE TABLE room_import_hacks (
     message_id_offset INTEGER NOT NULL
 )
                     """
-                )
-                conn.execute(
+                ))
+                conn.execute(text(
                     """
                     INSERT INTO room_import_hacks
                     SELECT room, old_message_id_max, message_id_offset
                         FROM old_room_import_hacks
                     """
-                )
-                conn.execute('DROP TABLE old_room_import_hacks')
+                ))
+                conn.execute(text('DROP TABLE old_room_import_hacks'))
 
                 changed = True
 
@@ -133,21 +134,21 @@ CREATE TABLE room_import_hacks (
             if check_only:
                 raise DatabaseUpgradeRequired("v0.1.x import hacks tables")
             if fix_fid:
-                conn.execute(
+                conn.execute(text(
                     """
 ALTER TABLE file_id_hacks DROP CONSTRAINT file_id_hacks_room_fkey;
 ALTER TABLE file_id_hacks ADD CONSTRAINT
 file_id_hacks_room_fkey FOREIGN KEY (room) REFERENCES rooms(id);
                     """
-                )
+                ))
             if fix_room:
-                conn.execute(
+                conn.execute(text(
                     """
 ALTER TABLE room_import_hacks DROP CONSTRAINT room_import_hacks_room_fkey;
 ALTER TABLE room_import_hacks ADD CONSTRAINT
 room_import_hacks_room_fkey FOREIGN KEY (room) REFERENCES rooms(id);
                     """
-                )
+                ))
             changed = True
 
     return changed

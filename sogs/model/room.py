@@ -116,21 +116,18 @@ class Room:
             self.info_updates,
             self.active_users,
         ) = (
-            row[c]
-            for c in (
-                'id',
-                'token',
-                'name',
-                'description',
-                'image',
-                'created',
-                'message_sequence',
-                'info_updates',
-                'active_users',
-            )
+            row.id,
+            row.token,
+            row.name,
+            row.description,
+            row.image,
+            row.created,
+            row.message_sequence,
+            row.info_updates,
+            row.active_users,
         )
         self._default_read, self._default_accessible, self._default_write, self._default_upload = (
-            bool(row[c]) for c in ('read', 'accessible', 'write', 'upload')
+            bool(x) for x in (row.read, row.accessible, row.write, row.upload)
         )
 
         if (
@@ -697,27 +694,28 @@ class Room:
             user=user.id if user else None,
             limit=limit,
         ):
-            if sequence and row['seqno_reactions'] > sequence >= row['seqno_data']:
+            if sequence and row.seqno_reactions > sequence >= row.seqno_data:
                 # This is a reaction-only update, so we only want to include the reaction info
                 # (added later) but not the full details.
-                msgs.append({x: row[x] for x in ('id', 'seqno')})
+                msgs.append({'id': row.id, 'seqno': row.seqno })
                 continue
 
-            msg = {x: row[x] for x in ('id', 'session_id', 'posted', 'seqno')}
-            data = row['data']
+            msg = {'id': row.id, 'session_id': row.session_id, 'posted': row.posted, 'seqno': row.seqno}
+
+            data = row.data
             if data is None:
                 msg['data'] = None
                 msg['deleted'] = True
             else:
-                msg['data'] = utils.add_session_message_padding(data, row['data_size'])
-                msg['signature'] = row['signature']
-            if row['edited'] is not None:
-                msg['edited'] = row['edited']
-            if row['whisper_to'] is not None or row['whisper_mods']:
+                msg['data'] = utils.add_session_message_padding(data, row.data_size)
+                msg['signature'] = row.signature
+            if row.edited is not None:
+                msg['edited'] = row.edited
+            if row.whisper_to is not None or row.whisper_mods:
                 msg['whisper'] = True
-                msg['whisper_mods'] = row['whisper_mods']
-                if row['whisper_to'] is not None:
-                    msg['whisper_to'] = row['whisper_to']
+                msg['whisper_mods'] = row.whisper_mods
+                if row.whisper_to is not None:
+                    msg['whisper_to'] = row.whisper_to
             msgs.append(msg)
 
         if reactions:
@@ -1920,7 +1918,7 @@ class Room:
             ).first()
         if not row:
             return
-        if row['expiry'] is None or row['expiry'] > time.time():
+        if row.expiry is None or row.expiry > time.time():
             return File(row)
 
     def upload_file(
@@ -2140,10 +2138,10 @@ class Room:
             r=self.id,
         ):
             data = dict()
-            for k in row.keys():
-                if row[k] is not None and k not in ('session_id', 'room', 'user'):
-                    data[k] = bool(row[k])
-            ret[row['session_id']] = data
+            for k, v in row.mappings().items():
+                if v is not None and k not in ('session_id', 'room', 'user'):
+                    data[k] = bool(v)
+            ret[row.session_id] = data
         return ret
 
     def user_permissions(self, user):
@@ -2160,7 +2158,7 @@ class Room:
         if not row:
             return {}
         return {
-            k: bool(row[k]) for k in row.keys() if k not in ('room', 'user') and row[k] is not None
+            k: bool(v) for k, v in row.mappings().items() if k not in ('room', 'user') and v is not None
         }
 
     @property
@@ -2185,13 +2183,13 @@ class Room:
             r=self.id,
         ):
             data = dict()
-            for k in row.keys():
+            for k, v in row.mappings().items():
                 if k == 'user':
                     continue
                 if k in ('at', 'session_id'):
-                    data[k] = row[k]
-                elif row[k] is not None:
-                    data[k] = bool(row[k])
+                    data[k] = v
+                elif v is not None:
+                    data[k] = bool(v)
             ret.append(data)
         return ret
 
@@ -2216,8 +2214,8 @@ class Room:
             u=user.id,
             r=self.id,
         ):
-            result.append({k: bool(row[k]) for k in row.keys() if k != 'at' and row[k] is not None})
-            result[-1]['at'] = row['at']
+            result.append({k: bool(v) for k, v in row.mappings().items if k != 'at' and v is not None})
+            result[-1]['at'] = row[0]
 
         return result
 

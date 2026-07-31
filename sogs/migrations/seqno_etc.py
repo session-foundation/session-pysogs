@@ -1,5 +1,6 @@
 import logging
 from .exc import DatabaseUpgradeRequired
+from sqlalchemy import text
 
 
 def migrate(conn, *, check_only):
@@ -31,9 +32,9 @@ def migrate(conn, *, check_only):
     # anyway, so we just recreate the whole thing (along with triggers which we also need to
     # update/fix)
     logging.warning("Recreating pinned_messages table")
-    conn.execute("DROP TABLE pinned_messages")
+    conn.execute(text("DROP TABLE pinned_messages"))
     if db.engine.name == 'sqlite':
-        conn.execute(
+        conn.execute(text(
             """
 CREATE TABLE pinned_messages (
     room INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
@@ -43,8 +44,8 @@ CREATE TABLE pinned_messages (
     PRIMARY KEY(room, message)
 )
 """  # noqa: E501
-        )
-        conn.execute(
+        ))
+        conn.execute(text(
             """
 CREATE TRIGGER room_metadata_pinned_add AFTER INSERT ON pinned_messages
 FOR EACH ROW
@@ -52,8 +53,8 @@ BEGIN
     UPDATE rooms SET info_updates = info_updates + 1 WHERE id = NEW.room;
 END
 """
-        )
-        conn.execute(
+        ))
+        conn.execute(text(
             """
 CREATE TRIGGER room_metadata_pinned_update AFTER UPDATE ON pinned_messages
 FOR EACH ROW
@@ -61,8 +62,8 @@ BEGIN
     UPDATE rooms SET info_updates = info_updates + 1 WHERE id = NEW.room;
 END
 """
-        )
-        conn.execute(
+        ))
+        conn.execute(text(
             """
 CREATE TRIGGER room_metadata_pinned_remove AFTER DELETE ON pinned_messages
 FOR EACH ROW
@@ -70,11 +71,11 @@ BEGIN
     UPDATE rooms SET info_updates = info_updates + 1 WHERE id = OLD.room;
 END
 """
-        )
+        ))
 
     else:  # postgresql
         logging.warning("Recreating pinned_messages table")
-        conn.execute(
+        conn.execute(text(
             """
 CREATE TABLE pinned_messages (
     room BIGINT NOT NULL REFERENCES rooms ON DELETE CASCADE,
@@ -93,21 +94,21 @@ CREATE TRIGGER room_metadata_pinned_remove AFTER DELETE ON pinned_messages
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_room_metadata_info_update_old();
 """
-        )
+        ))
 
     logging.warning("Applying message_sequence renames")
-    conn.execute("ALTER TABLE rooms RENAME COLUMN updates TO message_sequence")
+    conn.execute(text("ALTER TABLE rooms RENAME COLUMN updates TO message_sequence"))
 
     # The message_views migration will create these for us, and we need to drop them because:
     # 1) postgresql doesn't rename the view's output columns to match the new table column
     # 2) sqlite breaks if attempting the rename a column that is referenced in a view-of-a-view
-    conn.execute("DROP VIEW message_metadata")
-    conn.execute("DROP VIEW message_details")
+    conn.execute(text("DROP VIEW message_metadata"))
+    conn.execute(text("DROP VIEW message_details"))
 
-    conn.execute("ALTER TABLE messages RENAME COLUMN updated TO seqno")
+    conn.execute(text("ALTER TABLE messages RENAME COLUMN updated TO seqno"))
 
     # Gets recreated in the user_permissions migration:
     logging.warning("Dropping user_permissions view")
-    conn.execute("DROP VIEW IF EXISTS user_permissions")
+    conn.execute(text("DROP VIEW IF EXISTS user_permissions"))
 
     return True

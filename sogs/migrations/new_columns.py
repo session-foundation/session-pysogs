@@ -1,5 +1,6 @@
 import logging
 from .exc import DatabaseUpgradeRequired
+from sqlalchemy import text
 
 
 def migrate(conn, *, check_only):
@@ -27,7 +28,7 @@ def migrate(conn, *, check_only):
                 logging.warning(f"DB migration: Adding new column {table}.{name}")
                 if check_only:
                     raise DatabaseUpgradeRequired(f"new column {table}.{name}")
-                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {definition}"))
                 added = True
 
     return added

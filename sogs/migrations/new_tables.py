@@ -1,5 +1,6 @@
 import logging
 from .exc import DatabaseUpgradeRequired
+from sqlalchemy import text
 
 
 # { table_name => { 'sqlite': ['query1', 'query2'], 'pgsql': "query1; query2" } }
@@ -90,9 +91,9 @@ def migrate(conn, *, check_only):
 
         if db.engine.name == 'sqlite':
             for query in v['sqlite']:
-                conn.execute(query)
+                conn.execute(text(query))
         else:
-            conn.execute(v['pgsql'])
+            conn.execute(text(v['pgsql']))
 
         added = True
 

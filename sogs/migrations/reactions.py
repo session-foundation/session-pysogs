@@ -1,5 +1,6 @@
 from .exc import DatabaseUpgradeRequired
 import logging
+from sqlalchemy import text
 
 
 def migrate(conn, *, check_only):
@@ -15,14 +16,14 @@ def migrate(conn, *, check_only):
 
     if db.engine.name == "sqlite":
         if 'seqno_data' not in db.metadata.tables['messages'].c:
-            conn.execute("ALTER TABLE messages ADD COLUMN seqno_data INTEGER NOT NULL DEFAULT 0")
+            conn.execute(text("ALTER TABLE messages ADD COLUMN seqno_data INTEGER NOT NULL DEFAULT 0"))
             conn.execute(
                 "ALTER TABLE messages ADD COLUMN seqno_reactions INTEGER NOT NULL DEFAULT 0"
             )
-            conn.execute("UPDATE messages SET seqno_data = seqno")
+            conn.execute(text("UPDATE messages SET seqno_data = seqno"))
 
-        conn.execute("DROP TRIGGER IF EXISTS messages_insert_counter")
-        conn.execute(
+        conn.execute(text("DROP TRIGGER IF EXISTS messages_insert_counter"))
+        conn.execute(text(
             """
 CREATE TRIGGER messages_insert_counter AFTER INSERT ON messages
 FOR EACH ROW
@@ -32,9 +33,9 @@ BEGIN
         WHERE id = NEW.id;
 END
 """
-        )
-        conn.execute("DROP TRIGGER IF EXISTS messages_insert_history")
-        conn.execute(
+        ))
+        conn.execute(text("DROP TRIGGER IF EXISTS messages_insert_history"))
+        conn.execute(text(
             """
 CREATE TRIGGER messages_insert_history AFTER UPDATE OF data ON messages
 FOR EACH ROW WHEN NEW.data IS NOT OLD.data
@@ -47,8 +48,8 @@ BEGIN
     WHERE id = NEW.id;
 END
 """
-        )
-        conn.execute(
+        ))
+        conn.execute(text(
             """
 CREATE TRIGGER messages_seqno_updater_ins AFTER INSERT ON messages
 FOR EACH ROW
@@ -56,8 +57,8 @@ BEGIN
     UPDATE messages SET seqno = max(seqno_data, seqno_reactions) WHERE id = NEW.id;
 END
 """
-        )
-        conn.execute(
+        ))
+        conn.execute(text(
             """
 CREATE TRIGGER messages_seqno_updater_upd AFTER UPDATE OF seqno_data, seqno_reactions ON messages
 FOR EACH ROW
@@ -65,10 +66,10 @@ BEGIN
     UPDATE messages SET seqno = max(seqno_data, seqno_reactions) WHERE id = NEW.id;
 END
 """
-        )
-        conn.execute("DROP TABLE IF EXISTS reactions")
-        conn.execute("DROP TABLE IF EXISTS user_reactions")
-        conn.execute(
+        ))
+        conn.execute(text("DROP TABLE IF EXISTS reactions"))
+        conn.execute(text("DROP TABLE IF EXISTS user_reactions"))
+        conn.execute(text(
             """
 CREATE TABLE reactions (
     id INTEGER NOT NULL PRIMARY KEY,
@@ -76,8 +77,8 @@ CREATE TABLE reactions (
     reaction TEXT NOT NULL
 )
 """
-        )
-        conn.execute("CREATE UNIQUE INDEX reactions_message ON reactions (message, reaction)")
+        ))
+        conn.execute(text("CREATE UNIQUE INDEX reactions_message ON reactions (message, reaction)"))
         conn.execute(
             """
 CREATE TABLE user_reactions (
@@ -88,15 +89,15 @@ CREATE TABLE user_reactions (
 )
 """
         )
-        conn.execute("CREATE INDEX user_reactions_at ON user_reactions(reaction, at)")
-        conn.execute("DROP VIEW IF EXISTS message_reactions")
-        conn.execute(
+        conn.execute(text("CREATE INDEX user_reactions_at ON user_reactions(reaction, at)"))
+        conn.execute(text("DROP VIEW IF EXISTS message_reactions"))
+        conn.execute(text(
             """
 CREATE VIEW message_reactions AS
 SELECT reactions.*, user_reactions.user, user_reactions.at
 FROM reactions JOIN user_reactions ON user_reactions.reaction = reactions.id
 """
-        )
+        ))
         conn.execute(
             """
 CREATE TRIGGER message_reactions_insert INSTEAD OF INSERT ON message_reactions
@@ -110,14 +111,14 @@ BEGIN
 END
 """
         )
-        conn.execute(
+        conn.execute(text(
             """
 CREATE VIEW first_reactors AS
 SELECT *, rank() OVER (PARTITION BY reaction ORDER BY at) AS _order
 FROM user_reactions
 """
-        )
-        conn.execute(
+        ))
+        conn.execute(text(
             """
 CREATE TRIGGER reactions_no_update BEFORE UPDATE ON reactions
 FOR EACH ROW
@@ -125,7 +126,7 @@ BEGIN
     SELECT RAISE(ABORT, 'reactions is not UPDATEable');
 END
 """
-        )
+        ))
         conn.execute(
             """
 CREATE TRIGGER user_reactions_insert_seqno AFTER INSERT ON user_reactions
@@ -141,7 +142,7 @@ BEGIN
 END
 """  # noqa: E501
         )
-        conn.execute(
+        conn.execute(text(
             """
 CREATE TRIGGER user_reactions_no_update BEFORE UPDATE ON user_reactions
 FOR EACH ROW
@@ -149,7 +150,7 @@ BEGIN
     SELECT RAISE(ABORT, 'user_reactions is not UPDATEable');
 END
 """
-        )
+        ))
         conn.execute(
             """
 CREATE TRIGGER reactions_delete_seqno BEFORE DELETE ON user_reactions
@@ -165,7 +166,7 @@ BEGIN
 END
 """  # noqa: E501
         )
-        conn.execute(
+        conn.execute(text(
             """
 CREATE TRIGGER reactions_cleanup_empty AFTER DELETE ON user_reactions
 FOR EACH ROW
@@ -174,20 +175,20 @@ BEGIN
         AND NOT EXISTS(SELECT * FROM user_reactions WHERE reaction = reactions.id);
 END
 """
-        )
+        ))
 
     else:  # postgresql
 
         if 'seqno_data' not in db.metadata.tables['messages'].c:
-            conn.execute(
+            conn.execute(text(
                 """
 ALTER TABLE messages ADD COLUMN seqno_data INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE messages ADD COLUMN seqno_reactions INTEGER NOT NULL DEFAULT 0;
 UPDATE messages SET seqno_data = seqno;
 """
-            )
+            ))
 
-        conn.execute(
+        conn.execute(text(
             """
 
 CREATE OR REPLACE FUNCTION increment_room_sequence(room_id BIGINT)
@@ -344,6 +345,6 @@ FOR EACH ROW
 EXECUTE PROCEDURE trigger_reactions_clear_empty();
 
 """
-        )
+        ))
 
     return True

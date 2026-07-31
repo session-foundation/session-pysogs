@@ -1,5 +1,6 @@
 import logging
 from .exc import DatabaseUpgradeRequired
+from sqlalchemy import text
 
 
 def migrate(conn, *, check_only):
@@ -20,7 +21,7 @@ def migrate(conn, *, check_only):
         raise DatabaseUpgradeRequired("Create room_moderators view")
 
     if db.engine.name == "sqlite":
-        conn.execute(
+        conn.execute(text(
             """
 CREATE VIEW room_moderators AS
 SELECT session_id, mods.* FROM (
@@ -54,9 +55,9 @@ SELECT session_id, mods.* FROM (
     ) m GROUP BY "user", room
 ) mods JOIN users on "user" = users.id
 """
-        )
+        ))
     else:  # postgres
-        conn.execute(
+        conn.execute(text(
             """
 CREATE VIEW room_moderators AS
 SELECT session_id, mods.* FROM (
@@ -90,13 +91,13 @@ SELECT session_id, mods.* FROM (
     ) m GROUP BY "user", room
 ) mods JOIN users on "user" = users.id
 """
-        )
+        ))
 
-    conn.execute("DROP VIEW IF EXISTS user_permissions")
-    conn.execute("DROP INDEX IF EXISTS user_permission_overrides_public_mods")
-    conn.execute(
+    conn.execute(text("DROP VIEW IF EXISTS user_permissions"))
+    conn.execute(text("DROP INDEX IF EXISTS user_permission_overrides_public_mods"))
+    conn.execute(text(
         "CREATE INDEX IF NOT EXISTS user_permission_overrides_mods "
         "ON user_permission_overrides(room) WHERE moderator"
-    )
+    ))
 
     return True

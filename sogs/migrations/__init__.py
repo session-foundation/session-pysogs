@@ -53,14 +53,14 @@ def migrate(conn, *, check_only=False):
         import_hacks,
     ):
         changes = False
-        if check_only:
-            migration.migrate(conn, check_only=True)
-        else:
-            with db.transaction(conn):
+        with db.transaction(conn):
+            if check_only:
+                migration.migrate(conn, check_only=True)
+            else:
                 changes = migration.migrate(conn, check_only=False)
-            if changes:
-                db.metadata.clear()
-                db.metadata.reflect(bind=db.engine, views=True)
-                any_changes = True
+        if changes:
+            db.metadata.clear()
+            db.metadata.reflect(bind=db.engine, views=True)
+            any_changes = True
 
     return any_changes

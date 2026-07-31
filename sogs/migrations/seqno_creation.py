@@ -1,5 +1,6 @@
 import logging
 from .exc import DatabaseUpgradeRequired
+from sqlalchemy import text
 
 
 def migrate(conn, *, check_only):
@@ -19,9 +20,9 @@ def migrate(conn, *, check_only):
 
     logging.warning("Adding messages.seqno_creation column")
     if db.engine.name == 'sqlite':
-        conn.execute("ALTER TABLE messages ADD COLUMN seqno_creation INTEGER NOT NULL DEFAULT 0")
-        conn.execute("DROP TRIGGER IF EXISTS messages_insert_counter")
-        conn.execute(
+        conn.execute(text("ALTER TABLE messages ADD COLUMN seqno_creation INTEGER NOT NULL DEFAULT 0"))
+        conn.execute(text("DROP TRIGGER IF EXISTS messages_insert_counter"))
+        conn.execute(text(
             """
 CREATE TRIGGER messages_insert_counter AFTER INSERT ON messages
 FOR EACH ROW
@@ -31,9 +32,9 @@ BEGIN
     UPDATE messages SET seqno_creation = seqno_data WHERE id = NEW.id;
 END
 """  # noqa: E501
-        )
+        ))
     else:  # postgresql
-        conn.execute(
+        conn.execute(text(
             """
 ALTER TABLE messages ADD COLUMN seqno_creation BIGINT NOT NULL DEFAULT 0;
 
@@ -49,10 +50,10 @@ DROP TRIGGER IF EXISTS messages_insert_counter ON messages;
 CREATE TRIGGER messages_insert_counter AFTER INSERT ON messages
 FOR EACH ROW EXECUTE PROCEDURE trigger_messages_insert_counter();
 """
-        )
+        ))
 
     # Drop these to be recreated (with the no column) in the message_views migration.
-    conn.execute("DROP VIEW IF EXISTS message_metadata")
-    conn.execute("DROP VIEW IF EXISTS message_details")
+    conn.execute(text("DROP VIEW IF EXISTS message_metadata"))
+    conn.execute(text("DROP VIEW IF EXISTS message_details"))
 
     return True
