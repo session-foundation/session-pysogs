@@ -25,6 +25,22 @@ class RoomTokenConverter(BaseConverter):
         return value.token
 
 
+class RoomTokenStringConverter(BaseConverter):
+    """
+    A room token with the same restrictions as `Room`, but which does not have to refer to an
+    existing room: the token itself is passed to the endpoint rather than a Room object.  This is
+    for endpoints that need to report a non-existent room themselves: a `Room` component that
+    doesn't match a room makes the whole rule not match, which surfaces as whatever the routing
+    layer makes of the remaining rules (typically a 405 for a non-GET request) rather than a Not
+    Found.
+    """
+
+    regex = RoomTokenConverter.regex
+
+    def to_python(self, value):
+        return value
+
+
 class AnySessionIDConverter(BaseConverter):
     """
     A 66-hex-character Session ID (`05...`) or blinded Session ID (`15...`).
@@ -59,6 +75,7 @@ class UnblindedSessionIDConverter(BaseConverter):
 
 
 app.url_map.converters['Room'] = RoomTokenConverter
+app.url_map.converters['RoomToken'] = RoomTokenStringConverter
 app.url_map.converters['BlindSessionID'] = BlindSessionIDConverter
 app.url_map.converters['UnblindedSessionID'] = UnblindedSessionIDConverter
 app.url_map.converters['SessionID'] = (

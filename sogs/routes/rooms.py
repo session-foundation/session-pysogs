@@ -2,10 +2,12 @@ from .. import config, db, http
 from ..model import room as mroom, exc, user as muser
 from ..web import app
 from . import auth
+from .converters import RoomTokenConverter
 
 from flask import abort, jsonify, g, Blueprint, request, make_response, Response
 from werkzeug.http import http_date, parse_options_header
 from os import path, fstat
+import re
 import urllib.parse
 import time
 
@@ -176,6 +178,126 @@ def get_rooms():
 
 BAD_NAME_CHARS = {c: None for c in range(32)}
 BAD_DESCRIPTION_CHARS = {c: None for c in range(32) if not (0x09 <= c <= 0x0A)}
+
+
+@rooms.post("/rooms")
+@auth.global_admin_required
+def create_room():
+    """
+    Creates a new room.
+
+    This request takes a JSON object as request body containing the details of the room to create.
+    The invoking user must be a global admin.
+
+    The new room is created with the server's default permissions (i.e. readable, accessible,
+    writable, and uploadable by ordinary users); use [the room update
+    endpoint](#put-roomroom) to change them.
+
+    Note that the new room is *empty*: it contains no messages at all.  Some clients wait for a
+    message to arrive before they consider a community usable, and so will appear to hang rather
+    than fail on a room that nobody has posted in; if that matters to the caller then it should post
+    a message of its own after creating the room.
+
+    # Body
+
+    - `token` — The room token, as used in URLs; this must consist of `a`-`z`, `A`-`Z`, `0`-`9`, `_`
+      and `-` characters, and be no longer than 64 characters.  Tokens are case-insensitive: a room
+      cannot be created if one differing only in case already exists.
+    - `name` — The room name typically shown to users, e.g. `"Sodoku Solvers"`.  UTF-8 encoded;
+      newlines, tabs and other control characters (i.e. all codepoints below `0x20`) will be
+      stripped out.  Must not be empty once those characters are removed.
+    - `description` — Optional longer description of the room, e.g. `"All the best sodoku
+      discussion!"`.  UTF-8 encoded, and permits newlines and tabs; other control characters below
+      `0x20` will be stripped out.  May be omitted, `null`, or an empty string for a room with no
+      description.
+
+    # Return value
+
+    On success this endpoint returns a 201 (Created) status code (*not* 200) and a JSON object of
+    the new room's details, exactly as would be returned by the [single-room
+    endpoint](#get-roomroom).
+
+    # Error status codes
+
+    - 400 Bad Request — if the given `token` or `name` is missing or unacceptable.
+
+    - 403 Forbidden — if the invoking user is not a global admin.
+
+    - 409 Conflict — if a room with the given token (compared case-insensitively) already exists.
+    """
+
+    req = request.json
+    if not isinstance(req, dict):
+        app.logger.warning(f"Room creation: expected a JSON object body, not {type(req)}")
+        abort(http.BAD_REQUEST)
+
+    token = req.get('token')
+    # The same restriction the <Room:room> URL component applies; a token that can't appear in a URL
+    # would produce a room that no client could reach.
+    if not isinstance(token, str) or not re.fullmatch(RoomTokenConverter.regex, token):
+        app.logger.warning(f"Room creation with invalid token: {token!r}")
+        abort(http.BAD_REQUEST)
+
+    name = req.get('name')
+    if not isinstance(name, str):
+        app.logger.warning(f"Room creation with invalid name: {type(name)} != str")
+        abort(http.BAD_REQUEST)
+    name = name.translate(BAD_NAME_CHARS)
+    if len(name) == 0:
+        app.logger.warning("Room creation with empty name")
+        abort(http.BAD_REQUEST)
+
+    description = req.get('description')
+    if description is not None:
+        if not isinstance(description, str):
+            app.logger.warning(f"Room creation: invalid description: {type(description)} != str")
+            abort(http.BAD_REQUEST)
+        description = description.translate(BAD_DESCRIPTION_CHARS)
+        if len(description) == 0:
+            description = None
+
+    try:
+        room = mroom.Room.create(token=token, name=name, description=description)
+    except exc.AlreadyExists:
+        app.logger.warning(f"Room creation failed: room '{token}' already exists")
+        abort(http.CONFLICT)
+
+    resp = make_response(jsonify(get_room_info(room)))
+    resp.status_code = http.CREATED
+    return resp
+
+
+@rooms.delete("/room/<RoomToken:token>")
+@auth.global_admin_required
+def delete_room(token):
+    """
+    Deletes a room, including all of the posts, files, permissions, and bans within it.
+
+    This is permanent and cannot be undone.  The invoking user must be a global admin: a room admin
+    administers a room, but removing one from the server entirely is a server-level operation.
+
+    This request takes no body.
+
+    # URL Parameters
+
+    - `token` — The token of the room to delete.
+
+    # Return value
+
+    On success this endpoint returns a 200 status code and an empty json object.
+
+    # Error status codes
+
+    - 403 Forbidden — if the invoking user is not a global admin.
+
+    - 404 Not Found — if no room with the given token exists.  A caller removing a room it no longer
+      wants can treat this the same as success: either way the room is gone.
+    """
+
+    # Not a <Room:room> component, unlike the other room endpoints, so that a room that isn't there
+    # gets a Not Found rather than whatever the routing layer makes of an unmatched rule.
+    mroom.Room(token=token).delete()
+    return jsonify({})
 
 
 @rooms.put("/room/<Room:room>")

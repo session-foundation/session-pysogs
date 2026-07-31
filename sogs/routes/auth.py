@@ -154,6 +154,26 @@ def require_mod(room, *, admin=False):
         )
 
 
+def require_global_admin():
+    """Requires that the authenticated user is a global admin; aborts with 401 Unauthorized if there
+    is no user in the request, and 403 Forbidden if g.user is not a global admin."""
+    require_user()
+    if not g.user.global_admin:
+        abort_with_reason(http.FORBIDDEN, "This endpoint requires global admin permissions")
+
+
+def global_admin_required(f):
+    """Decorator for an endpoint that requires a global admin; this calls `require_global_admin()`
+    at the beginning of the request to abort the request if the user is not a global admin."""
+
+    @wraps(f)
+    def required_global_admin_wrapper(*args, **kwargs):
+        require_global_admin()
+        return f(*args, **kwargs)
+
+    return required_global_admin_wrapper
+
+
 def accessible_required(f):
     """Decorator for an endpoint that requires a user have accessible or read permission in the
     given room.  The function must take a `room` argument by name, as is typically used with flask
