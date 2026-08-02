@@ -697,10 +697,15 @@ class Room:
             if sequence and row.seqno_reactions > sequence >= row.seqno_data:
                 # This is a reaction-only update, so we only want to include the reaction info
                 # (added later) but not the full details.
-                msgs.append({'id': row.id, 'seqno': row.seqno })
+                msgs.append({'id': row.id, 'seqno': row.seqno})
                 continue
 
-            msg = {'id': row.id, 'session_id': row.session_id, 'posted': row.posted, 'seqno': row.seqno}
+            msg = {
+                'id': row.id,
+                'session_id': row.session_id,
+                'posted': row.posted,
+                'seqno': row.seqno,
+            }
 
             data = row.data
             if data is None:

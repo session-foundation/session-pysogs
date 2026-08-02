@@ -52,7 +52,9 @@ CREATE TABLE user_ban_futures (
 """
         ))
         conn.execute(text("CREATE INDEX user_ban_futures_at ON user_ban_futures(at)"))
-        conn.execute(text("CREATE INDEX user_ban_futures_room_user ON user_ban_futures(room, user)"))
+        conn.execute(
+            text("CREATE INDEX user_ban_futures_room_user ON user_ban_futures(room, user)")
+        )
 
     else:  # postgresql
         conn.execute(text(

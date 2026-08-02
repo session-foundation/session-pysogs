@@ -32,7 +32,8 @@ def migrate(conn, *, check_only):
     if 'file_id_hacks' in db.metadata.tables:
         # If the table exists but is empty (i.e. because all the attachments expired) then we should
         # drop it.
-        if not check_only and conn.execute(text("SELECT COUNT(*) FROM file_id_hacks")).first()[0] == 0:
+        count = conn.execute(text("SELECT COUNT(*) FROM file_id_hacks")).first()[0]
+        if not check_only and count == 0:
             logging.warning("Dropping file_id_hacks old sogs import table (no longer required)")
             db.metadata.tables['file_id_hacks'].drop(db.engine)
             changed = True
