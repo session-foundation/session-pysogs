@@ -2138,7 +2138,7 @@ class Room:
             r=self.id,
         ):
             data = dict()
-            for k, v in row.mappings().items():
+            for k, v in row._mapping.items():
                 if v is not None and k not in ('session_id', 'room', 'user'):
                     data[k] = bool(v)
             ret[row.session_id] = data
@@ -2158,7 +2158,9 @@ class Room:
         if not row:
             return {}
         return {
-            k: bool(v) for k, v in row.mappings().items() if k not in ('room', 'user') and v is not None
+            k: bool(v)
+            for k, v in row._mapping.items()
+            if k not in ('room', 'user') and v is not None
         }
 
     @property
@@ -2183,7 +2185,7 @@ class Room:
             r=self.id,
         ):
             data = dict()
-            for k, v in row.mappings().items():
+            for k, v in row._mapping.items():
                 if k == 'user':
                     continue
                 if k in ('at', 'session_id'):
@@ -2214,8 +2216,10 @@ class Room:
             u=user.id,
             r=self.id,
         ):
-            result.append({k: bool(v) for k, v in row.mappings().items if k != 'at' and v is not None})
-            result[-1]['at'] = row[0]
+            result.append(
+                {k: bool(v) for k, v in row._mapping.items() if k != 'at' and v is not None}
+            )
+            result[-1]['at'] = row.at
 
         return result
 
