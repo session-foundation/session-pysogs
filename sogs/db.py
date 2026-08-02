@@ -324,8 +324,9 @@ def init_engine(*args, **kwargs):
 
         @sqlalchemy.event.listens_for(engine, "begin")
         def do_begin(conn):
-            # emit our own BEGIN
-            conn.execute("BEGIN IMMEDIATE")
+            # emit our own BEGIN, straight at the driver as SQLAlchemy's own pysqlite recipe does.
+            # (A plain string is no longer executable under SQLAlchemy 2).
+            conn.exec_driver_sql("BEGIN IMMEDIATE")
 
     else:
         have_returning = True
