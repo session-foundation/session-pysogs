@@ -4,7 +4,6 @@ from .postfork import postfork
 import os
 import logging
 import importlib.resources
-from contextlib import nullcontext
 import sqlalchemy
 from sqlalchemy.sql.expression import bindparam
 
@@ -33,21 +32,6 @@ def transaction(dbconn=None):
         return dbconn.begin()
 
 
-# Similar to transaction(), above, except that if we are already in a
-# transaction this does nothing (unless transaction(), which uses savepoints
-# effectively as sub-transactions).
-def maybe_tx(dbconn=None):
-    if dbconn is None:
-        from . import web
-
-        dbconn = web.appdb
-
-    if dbconn.in_transaction():
-        return nullcontext()
-    else:
-        return dbconn.begin()
-
-
 def query(query, *, dbconn=None, bind_expanding=None, **params):
     """Executes a query containing :param style placeholders (regardless of the actual underlying
     database placeholder style), binding them using the given params keyword arguments.
@@ -68,6 +52,11 @@ def query(query, *, dbconn=None, bind_expanding=None, **params):
 
     Can execute on a specific connection by passing it as dbconn; if omitted, uses web.appdb.  (Note
     that dbconn *cannot* be used as a placeholder bind name).
+
+    When called inside a transaction() the statement joins that transaction, and the returned result
+    is live: it reads from the cursor as the caller consumes it, and stays valid only until the
+    transaction ends.  Otherwise the statement is committed before returning, and a result
+    containing rows is fully buffered so that the caller can still read it afterwards.
     """
 
     if dbconn is None:
@@ -80,8 +69,24 @@ def query(query, *, dbconn=None, bind_expanding=None, **params):
     if bind_expanding:
         q = q.bindparams(*(bindparam(c, expanding=True) for c in bind_expanding))
 
-    with maybe_tx(dbconn):
+    if dbconn.in_transaction():
+        # Someone up the stack owns a transaction: it decides when this statement gets committed,
+        # and the result stays usable for as long as it is open.
         return dbconn.execute(q, params)
+
+    # Otherwise the statement is a transaction of its own, which has to be committed before we
+    # return: neither postgresql nor SQLAlchemy 2 will do it for us.  That has to happen here rather
+    # than when the caller is done with the result, so any rows have to be taken off the cursor
+    # first -- sqlite refuses to commit while a statement still has rows pending, and even where it
+    # is permitted the rows would be gone before the caller asked for them.  The queries this
+    # applies to are all small, and their callers build lists out of them regardless.
+    with dbconn.begin():
+        result = dbconn.execute(q, params)
+        if result.returns_rows:
+            # Same Result interface (.first(), .fetchall(), iteration, ...), fed from the buffered
+            # rows instead of the cursor.
+            result = result.freeze()()
+        return result
 
 
 have_returning = True
