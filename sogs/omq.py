@@ -70,11 +70,24 @@ def send_mule(command, *args, prefix="worker."):
     be prefixed with "worker." (unless overridden).
 
     Any args will be bt-serialized and send as message parts.
+
+    Failing to notify the mule is logged but not raised: these calls are made after the database
+    work they are announcing has been committed, so throwing here fails a request that actually
+    succeeded, and a client that retries such a request duplicates whatever it just posted.
     """
     if prefix:
         command = prefix + command
 
-    if test_suite and omq is None:
-        pass  # TODO: for mule call testing we may want to do something else here?
-    else:
+    if omq is None or mule_conn is None:
+        if not test_suite:
+            from .web import app  # Imported here to avoid circular import
+
+            app.logger.warning(f"Not connected to the mule; dropping {command} notification")
+        return
+
+    try:
         omq.send(mule_conn, command, *(bt_serialize(data) for data in args))
+    except Exception as e:
+        from .web import app  # Imported here to avoid circular import
+
+        app.logger.error(f"Failed to send {command} notification to the mule: {e}")
