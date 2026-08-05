@@ -16,7 +16,9 @@ def migrate(conn, *, check_only):
 
     if db.engine.name == "sqlite":
         if 'seqno_data' not in db.metadata.tables['messages'].c:
-            conn.execute(text("ALTER TABLE messages ADD COLUMN seqno_data INTEGER NOT NULL DEFAULT 0"))
+            conn.execute(
+                text("ALTER TABLE messages ADD COLUMN seqno_data INTEGER NOT NULL DEFAULT 0")
+            )
             conn.execute(
                 "ALTER TABLE messages ADD COLUMN seqno_reactions INTEGER NOT NULL DEFAULT 0"
             )

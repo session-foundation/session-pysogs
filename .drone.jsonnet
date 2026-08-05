@@ -6,7 +6,7 @@ local default_deps = [
   'python3-pytest',
   'python3-oxenmq',
   'python3-oxenc',
-  'python3-pyonionreq',
+  'python3-session-util',
   'python3-coloredlogs',
   'python3-uwsgidecorators',
   'python3-flask',

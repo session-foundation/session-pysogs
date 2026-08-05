@@ -3,6 +3,19 @@ from util import pad64
 from request import sogs_get, sogs_put, sogs_delete
 
 
+def sogs_react(client, url, user):
+    """
+    PUTs a reaction, then waits out the resolution of the stored reaction time.
+
+    Reactors come back ordered by when they reacted, and sqlite stores that time with millisecond
+    resolution: reactions added back to back otherwise share a timestamp, leaving the order that the
+    assertions here rely on up to the database to break as it likes.
+    """
+    r = sogs_put(client, url, {}, user)
+    time.sleep(0.002)
+    return r
+
+
 def test_reactions(client, room, room2, user, user2, mod, admin, global_mod, global_admin):
     for i in range(1, 11):
         poster = admin if i == 6 else mod if i in (4, 7) else user2 if i % 2 == 0 else user
@@ -20,7 +33,7 @@ def test_reactions(client, room, room2, user, user2, mod, admin, global_mod, glo
 
     new_seqno = seqno
     for x in ("🖕", "🍆", "f", "y/n", "abcdefghijkl"):
-        r = sogs_put(client, f"/room/test-room/reaction/4/{x}", {}, user)
+        r = sogs_react(client, f"/room/test-room/reaction/4/{x}", user)
         assert r.status_code == 200
         new_seqno += 1
         assert r.json == {"added": True, "seqno": new_seqno}
@@ -37,7 +50,7 @@ def test_reactions(client, room, room2, user, user2, mod, admin, global_mod, glo
     seqno += 5
 
     # Already present:
-    r = sogs_put(client, "/room/test-room/reaction/4/🖕", {}, user)
+    r = sogs_react(client, "/room/test-room/reaction/4/🖕", user)
     assert r.status_code == 200
     assert r.json == {"added": False, "seqno": seqno}
     assert sogs_get(client, f"/room/test-room/messages/since/{seqno}?t=r", user2).json == []
@@ -47,11 +60,11 @@ def test_reactions(client, room, room2, user, user2, mod, admin, global_mod, glo
 
     assert r.json[-1]["seqno"] == seqno
 
-    r = sogs_put(client, "/room/test-room/reaction/10/🍍", {}, user)
+    r = sogs_react(client, "/room/test-room/reaction/10/🍍", user)
     assert r.json == {"added": True, "seqno": seqno + 1}
-    r = sogs_put(client, "/room/test-room/reaction/4/🖕", {}, user2)
+    r = sogs_react(client, "/room/test-room/reaction/4/🖕", user2)
     assert r.json == {"added": True, "seqno": seqno + 2}
-    r = sogs_put(client, "/room/test-room/reaction/4/🍍", {}, user)
+    r = sogs_react(client, "/room/test-room/reaction/4/🍍", user)
     assert r.json == {"added": True, "seqno": seqno + 3}
 
     r = sogs_get(client, f"/room/test-room/messages/since/{seqno}?t=r", user2)
@@ -67,25 +80,25 @@ def test_reactions(client, room, room2, user, user2, mod, admin, global_mod, glo
     room.edit_post(mod, 4, data=b'edited fake data 4', sig=pad64(b'fake sig 4b'))
     new_seqno = seqno + 1
     for u in (user2, global_admin, mod, global_mod, admin):
-        r = sogs_put(client, "/room/test-room/reaction/4/🍍", {}, u)
+        r = sogs_react(client, "/room/test-room/reaction/4/🍍", u)
         new_seqno += 1
         assert r.json == {'added': True, 'seqno': new_seqno}
-    assert sogs_put(client, "/room/test-room/reaction/4/🍍", {}, user).json == {
+    assert sogs_react(client, "/room/test-room/reaction/4/🍍", user).json == {
         'added': False,
         "seqno": new_seqno,
     }
-    r = sogs_put(client, "/room/test-room/reaction/4/🦒🦍🐍🐊🦢🦁🦎", {}, user)
+    r = sogs_react(client, "/room/test-room/reaction/4/🦒🦍🐍🐊🦢🦁🦎", user)
     assert r.json == {'added': True, "seqno": new_seqno + 1}
 
     # user2 is the fourth reactor (of 5) and so should get ourself last in the truncated reactor
     # list:
     for u in (user, mod, global_mod, user2, admin):
-        r = sogs_put(client, "/room/test-room/reaction/4/🂤", {}, u)
+        r = sogs_react(client, "/room/test-room/reaction/4/🂤", u)
 
     # user2 is fifth (of 5) and so should not be in the truncated reactor list (but should still get
     # "you"):
     for u in (user, mod, global_mod, global_admin, user2):
-        r = sogs_put(client, "/room/test-room/reaction/4/🂵", {}, u)
+        r = sogs_react(client, "/room/test-room/reaction/4/🂵", u)
 
     exp_reactions = {
         'abcdefghijkl': {'index': 4, 'count': 1, 'reactors': [user.session_id]},
@@ -216,11 +229,11 @@ def test_reactions(client, room, room2, user, user2, mod, admin, global_mod, glo
         'seqno': seqno + 1,
     }
 
-    assert sogs_put(client, "/room/test-room/reaction/9/🍍", {}, user).json == {
+    assert sogs_react(client, "/room/test-room/reaction/9/🍍", user).json == {
         'added': True,
         "seqno": seqno + 2,
     }
-    assert sogs_put(client, "/room/test-room/reaction/9/🍍", {}, user2).json == {
+    assert sogs_react(client, "/room/test-room/reaction/9/🍍", user2).json == {
         'added': True,
         "seqno": seqno + 3,
     }

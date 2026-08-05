@@ -20,7 +20,9 @@ def migrate(conn, *, check_only):
 
     logging.warning("Adding messages.seqno_creation column")
     if db.engine.name == 'sqlite':
-        conn.execute(text("ALTER TABLE messages ADD COLUMN seqno_creation INTEGER NOT NULL DEFAULT 0"))
+        conn.execute(
+            text("ALTER TABLE messages ADD COLUMN seqno_creation INTEGER NOT NULL DEFAULT 0")
+        )
         conn.execute(text("DROP TRIGGER IF EXISTS messages_insert_counter"))
         conn.execute(text(
             """

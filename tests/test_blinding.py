@@ -291,7 +291,7 @@ def get_perm_flags(db, cols, exclude=[]):
                 """,
             bind_expanding=['u'],
             u=[u.id for u in exclude],
-        )
+        ).mappings()
     }
 
 
