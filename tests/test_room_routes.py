@@ -956,6 +956,42 @@ def test_posting(client, room, user, user2, mod, global_mod):
     assert r.json == [p1]
 
 
+def test_posting_survives_mule_failure(client, room, user, db):
+    # The mule is notified after the post has been committed, so a failure to notify must not fail
+    # the request: a client that retries a "failed" post that actually succeeded ends up posting it
+    # several times.
+    import sogs.omq
+
+    class BrokenOMQ:
+        def send(self, *args, **kwargs):
+            raise RuntimeError("connection attempt timed out")
+
+    saved = (sogs.omq.omq, sogs.omq.mule_conn, sogs.omq.test_suite)
+    sogs.omq.omq, sogs.omq.mule_conn, sogs.omq.test_suite = BrokenOMQ(), object(), False
+    try:
+        d, s = (utils.encode_base64(x) for x in (b"post 1", pad64("sig 1")))
+        r = sogs_post(client, "/room/test-room/message", {"data": d, "signature": s}, user)
+        assert r.status_code == 201
+    finally:
+        sogs.omq.omq, sogs.omq.mule_conn, sogs.omq.test_suite = saved
+
+    # ... and the post is there exactly once:
+    assert db.query("SELECT COUNT(*) FROM messages").first()[0] == 1
+
+    # Same again with no mule connection at all, which is what a worker that lost the startup race
+    # to the mule is left holding:
+    saved = (sogs.omq.omq, sogs.omq.test_suite)
+    sogs.omq.omq, sogs.omq.test_suite = None, False
+    try:
+        d, s = (utils.encode_base64(x) for x in (b"post 2", pad64("sig 2")))
+        r = sogs_post(client, "/room/test-room/message", {"data": d, "signature": s}, user)
+        assert r.status_code == 201
+    finally:
+        sogs.omq.omq, sogs.omq.test_suite = saved
+
+    assert db.query("SELECT COUNT(*) FROM messages").first()[0] == 2
+
+
 def test_whisper_to(client, room, user, user2, mod, global_mod):
 
     url_post = "/room/test-room/message"

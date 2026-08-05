@@ -42,13 +42,26 @@ def start_oxenmq():
 
     from .web import app  # Imported here to avoid circular import
 
-    app.logger.debug(f"Starting oxenmq connection to mule in worker {uwsgi.worker_id()}")
+    worker_id = uwsgi.worker_id()
+
+    app.logger.debug(f"Starting oxenmq connection to mule in worker {worker_id}")
 
     omq.start()
     app.logger.debug("Started, connecting to mule")
-    mule_conn = omq.connect_remote(oxenmq.Address(config.OMQ_INTERNAL))
 
-    app.logger.debug(f"worker {uwsgi.worker_id()} connected to mule OMQ")
+    def mule_connected(conn):
+        app.logger.debug(f"worker {worker_id} connected to mule OMQ")
+
+    def mule_connect_failed(conn, reason):
+        app.logger.error(f"worker {worker_id} could not connect to the mule: {reason}")
+
+    # Connect asynchronously: uwsgi starts workers and the mule at the same time and does not order
+    # them, so a worker that gets there first would find nothing listening on the internal socket
+    # yet.  This form returns a usable connection immediately and queues anything we send until the
+    # mule is up, rather than giving up on a mule that is a moment behind us.
+    mule_conn = omq.connect_remote(
+        oxenmq.Address(config.OMQ_INTERNAL), mule_connected, mule_connect_failed
+    )
 
 
 def send_mule(command, *args, prefix="worker."):
@@ -57,11 +70,24 @@ def send_mule(command, *args, prefix="worker."):
     be prefixed with "worker." (unless overridden).
 
     Any args will be bt-serialized and send as message parts.
+
+    Failing to notify the mule is logged but not raised: these calls are made after the database
+    work they are announcing has been committed, so throwing here fails a request that actually
+    succeeded, and a client that retries such a request duplicates whatever it just posted.
     """
     if prefix:
         command = prefix + command
 
-    if test_suite and omq is None:
-        pass  # TODO: for mule call testing we may want to do something else here?
-    else:
+    if omq is None or mule_conn is None:
+        if not test_suite:
+            from .web import app  # Imported here to avoid circular import
+
+            app.logger.warning(f"Not connected to the mule; dropping {command} notification")
+        return
+
+    try:
         omq.send(mule_conn, command, *(bt_serialize(data) for data in args))
+    except Exception as e:
+        from .web import app  # Imported here to avoid circular import
+
+        app.logger.error(f"Failed to send {command} notification to the mule: {e}")
