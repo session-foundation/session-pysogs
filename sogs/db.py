@@ -100,11 +100,14 @@ def insert_and_get_pk(insert, _pk, *, dbconn=None, **params):
 
     if have_returning:
         insert += f" RETURNING {_pk}"
+        # The RETURNING row has to be consumed *before* the transaction commits: sqlite refuses to
+        # commit while a statement still has rows pending ("cannot commit transaction - SQL
+        # statements in progress").  Holding the tx open here makes query()'s own maybe_tx() a no-op,
+        # so the commit happens on exit from this block, after .first() has drained the cursor.
+        with maybe_tx(dbconn):
+            return query(insert, dbconn=dbconn, **params).first()[0]
 
-    result = query(insert, dbconn=dbconn, **params)
-    if have_returning:
-        return result.first()[0]
-    return result.lastrowid
+    return query(insert, dbconn=dbconn, **params).lastrowid
 
 
 def insert_and_get_row(insert, _table, _pk, *, dbconn=None, **params):
@@ -121,7 +124,9 @@ def insert_and_get_row(insert, _table, _pk, *, dbconn=None, **params):
 
     if have_returning:
         insert += " RETURNING *"
-        return query(insert, dbconn=dbconn, **params).first()
+        # See insert_and_get_pk: the RETURNING row must be drained before the commit.
+        with maybe_tx(dbconn):
+            return query(insert, dbconn=dbconn, **params).first()
 
     with transaction(dbconn):
         pkval = insert_and_get_pk(insert, _pk, dbconn=dbconn, **params)
@@ -320,7 +325,7 @@ def init_engine(*args, **kwargs):
         @sqlalchemy.event.listens_for(engine, "begin")
         def do_begin(conn):
             # emit our own BEGIN
-            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(sqlalchemy.text("BEGIN IMMEDIATE"))
 
     else:
         have_returning = True
